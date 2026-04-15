@@ -1,0 +1,15 @@
+spring:
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+app:
+  rate-limit:
+    enabled: false
+
+logging:
+  level:
+    com.boon.bank: DEBUG

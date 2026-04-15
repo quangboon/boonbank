@@ -1,0 +1,11 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+        generate_statistics: true
+
+logging:
+  level:
+    com.boon.bank: DEBUG
+    org.hibernate.SQL: DEBUG

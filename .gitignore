@@ -1,0 +1,21 @@
+# === Java / Maven ===
+backend/target/
+backend/.idea/
+backend/*.iml
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# === Node / Next.js ===
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts
+
+# === General ===
+.DS_Store
+*.log
+*.pem
+.env
+.env.*
+!.env.example
