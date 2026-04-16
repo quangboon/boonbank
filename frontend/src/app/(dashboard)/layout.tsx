@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import {
@@ -35,14 +35,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const { token, role, logout, username } = useAuthStore()
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    if (!token) {
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (hydrated && !token) {
       router.replace("/login")
     }
-  }, [token, router])
+  }, [hydrated, token, router])
 
-  if (!token) return null
+  if (!hydrated || !token) return null
 
   function handleLogout() {
     logout()

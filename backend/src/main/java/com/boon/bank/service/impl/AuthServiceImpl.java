@@ -1,6 +1,8 @@
 package com.boon.bank.service.impl;
 
 import com.boon.bank.dto.request.LoginRequest;
+import com.boon.bank.dto.request.LogoutRequest;
+import com.boon.bank.dto.request.RefreshTokenRequest;
 import com.boon.bank.dto.request.RegisterRequest;
 import com.boon.bank.dto.response.AuthResponse;
 import com.boon.bank.entity.AppUser;
@@ -56,8 +58,10 @@ public class AuthServiceImpl implements AuthService {
 
         userRepo.save(builder.build());
         var userDetails = userDetailsService.loadUserByUsername(req.username());
+        var accessToken = jwtService.generateToken(userDetails);
+        var refreshToken = jwtService.generateRefreshToken(req.username());
         log.info("User registered: {}", req.username());
-        return new AuthResponse(jwtService.generateToken(userDetails), Role.CUSTOMER.name());
+        return new AuthResponse(accessToken, refreshToken, Role.CUSTOMER.name());
     }
 
     @Override
@@ -75,7 +79,34 @@ public class AuthServiceImpl implements AuthService {
         loginAttemptService.resetAttempts(req.username());
         var userDetails = userDetailsService.loadUserByUsername(req.username());
         var appUser = userRepo.findByUsername(req.username()).orElseThrow();
+        var accessToken = jwtService.generateToken(userDetails);
+        var refreshToken = jwtService.generateRefreshToken(req.username());
         log.info("Login: user={} role={}", req.username(), appUser.getRole());
-        return new AuthResponse(jwtService.generateToken(userDetails), appUser.getRole().name());
+        return new AuthResponse(accessToken, refreshToken, appUser.getRole().name());
+    }
+
+    @Override
+    public AuthResponse refresh(RefreshTokenRequest req) {
+        var username = jwtService.validateRefreshToken(req.refreshToken());
+        if (username == null) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN, "Invalid or expired refresh token", HttpStatus.UNAUTHORIZED);
+        }
+
+        // Rotation: delete old refresh token, issue new pair
+        jwtService.deleteRefreshToken(req.refreshToken());
+
+        var userDetails = userDetailsService.loadUserByUsername(username);
+        var appUser = userRepo.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "User not found", HttpStatus.NOT_FOUND));
+        var accessToken = jwtService.generateToken(userDetails);
+        var refreshToken = jwtService.generateRefreshToken(username);
+        log.info("Token refreshed: user={}", username);
+        return new AuthResponse(accessToken, refreshToken, appUser.getRole().name());
+    }
+
+    @Override
+    public void logout(LogoutRequest req) {
+        jwtService.deleteRefreshToken(req.refreshToken());
+        log.info("User logged out, refresh token revoked");
     }
 }

@@ -11,6 +11,7 @@ export interface Page<T> {
 // Auth
 export interface AuthResult {
   token: string
+  refreshToken: string
   role: string
 }
 

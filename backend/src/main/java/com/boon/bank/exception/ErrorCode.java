@@ -14,6 +14,7 @@ public final class ErrorCode {
     // auth
     public static final String DUPLICATE_USER = "DUPLICATE_USER";
     public static final String ACCOUNT_LOCKED = "ACCOUNT_LOCKED";
+    public static final String INVALID_TOKEN = "INVALID_TOKEN";
 
     // customer
     public static final String DUPLICATE_EMAIL = "DUPLICATE_EMAIL";

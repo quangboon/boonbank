@@ -12,6 +12,7 @@ import com.boon.bank.repository.CustomerRepository;
 import com.boon.bank.repository.CustomerTypeRepository;
 import com.boon.bank.security.SecurityUtil;
 import com.boon.bank.service.CustomerService;
+import com.boon.bank.specification.CustomerSpec;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -19,6 +20,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,16 @@ public class CustomerServiceImpl implements CustomerService {
             return new PageImpl<>(list, pageable, list.size());
         }
         return repo.findAll(pageable).map(mapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CustomerResponse> search(String name, String email, String phone, String location, Pageable pageable) {
+        var spec = Specification.where(CustomerSpec.nameLike(name))
+                .and(CustomerSpec.emailLike(email))
+                .and(CustomerSpec.phoneLike(phone))
+                .and(CustomerSpec.locationEqual(location));
+        return repo.findAll(spec, pageable).map(mapper::toResponse);
     }
 
     @Override

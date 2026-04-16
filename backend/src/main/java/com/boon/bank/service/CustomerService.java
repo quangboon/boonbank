@@ -9,6 +9,8 @@ public interface CustomerService {
 
     Page<CustomerResponse> findAll(Pageable pageable);
 
+    Page<CustomerResponse> search(String name, String email, String phone, String location, Pageable pageable);
+
     CustomerResponse getById(Long id);
 
     CustomerResponse create(CustomerRequest req);

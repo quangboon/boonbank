@@ -16,7 +16,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     open-in-view: false
 
   flyway:
@@ -37,8 +37,10 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:}
+    secret: ${JWT_SECRET:bBDRvdfzX0du720zU7Y6e706dVoEEdbSNlrmh8lYF4P8EfeQMRER7X2jJIWUx2bUPevj2bSkQ/cg8st7U7aoHA==}
     expiration-ms: ${JWT_EXPIRATION:86400000}
+    access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:900000}
+    refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
   fee:

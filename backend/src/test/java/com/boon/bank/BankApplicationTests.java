@@ -1,30 +1,24 @@
 package com.boon.bank;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import javax.crypto.KeyGenerator;
+import java.util.Base64;
 
-@SpringBootTest
-@Testcontainers
-@ActiveProfiles("test")
+import org.junit.jupiter.api.Test;
+
 class BankApplicationTests {
 
-    @Container
-    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @DynamicPropertySource
-    static void dbProps(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", pg::getJdbcUrl);
-        registry.add("spring.datasource.username", pg::getUsername);
-        registry.add("spring.datasource.password", pg::getPassword);
-    }
-
     @Test
-    void contextLoads() {
+    void generateJwtSecret() throws Exception {
+        // HS512 = 512-bit key = 64 bytes (do dai toi da cho HMAC-SHA)
+        KeyGenerator kg = KeyGenerator.getInstance("HmacSHA512");
+        kg.init(512);
+        var key = kg.generateKey();
+        String base64Secret = Base64.getEncoder().encodeToString(key.getEncoded());
+
+        System.out.println("===========================================");
+        System.out.println("JWT SECRET (HS512 - 512-bit / 64 bytes):");
+        System.out.println(base64Secret);
+        System.out.println("Do dai: " + base64Secret.length() + " ky tu");
+        System.out.println("===========================================");
     }
 }

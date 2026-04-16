@@ -25,6 +25,17 @@ public class CustomerController {
         return ApiResponse.ok(customerService.findAll(pageable));
     }
 
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('ADMIN')")
+    ApiResponse<Page<CustomerResponse>> search(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String location,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(customerService.search(name, email, phone, location, pageable));
+    }
+
     @GetMapping("/{id}")
     ApiResponse<CustomerResponse> getById(@PathVariable Long id) {
         return ApiResponse.ok(customerService.getById(id));
