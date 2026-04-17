@@ -9,6 +9,8 @@ import com.boon.bank.entity.AppUser;
 import com.boon.bank.entity.enums.Role;
 import com.boon.bank.exception.BusinessException;
 import com.boon.bank.exception.ErrorCode;
+import com.boon.bank.entity.enums.AccountStatus;
+import com.boon.bank.repository.AccountRepository;
 import com.boon.bank.repository.CustomerRepository;
 import com.boon.bank.repository.UserRepository;
 import com.boon.bank.security.JwtService;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepo;
+    private final AccountRepository accountRepo;
     private final CustomerRepository customerRepo;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -77,8 +80,18 @@ public class AuthServiceImpl implements AuthService {
         }
 
         loginAttemptService.resetAttempts(req.username());
-        var userDetails = userDetailsService.loadUserByUsername(req.username());
         var appUser = userRepo.findByUsername(req.username()).orElseThrow();
+
+        // Customer phải có ít nhất 1 tài khoản ACTIVE
+        if (appUser.getRole() == Role.CUSTOMER && appUser.getCustomer() != null) {
+            boolean hasActive = accountRepo.existsByCustomerIdAndStatusAndDeletedFalse(
+                    appUser.getCustomer().getId(), AccountStatus.ACTIVE);
+            if (!hasActive)
+                throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE,
+                        "All accounts are locked or closed. Please contact admin.", HttpStatus.FORBIDDEN);
+        }
+
+        var userDetails = userDetailsService.loadUserByUsername(req.username());
         var accessToken = jwtService.generateToken(userDetails);
         var refreshToken = jwtService.generateRefreshToken(req.username());
         log.info("Login: user={} role={}", req.username(), appUser.getRole());

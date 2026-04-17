@@ -81,13 +81,6 @@ export default function TransactionsPage() {
         const acct = await lookupAccount(num)
         setRecipientName(acct.customerName)
         setLookupError(null)
-
-        // auto-fill description with sender name
-        setForm(f => {
-          if (f.description) return f
-          const sender = activeAccounts.find(a => a.id === f.fromAccountId)
-          return sender ? { ...f, description: sender.customerName } : f
-        })
       } catch {
         setRecipientName(null)
         setLookupError('Account not found')
@@ -109,13 +102,10 @@ export default function TransactionsPage() {
   const showFrom = form.type === 'WITHDRAWAL' || form.type === 'TRANSFER'
   const showTo = form.type === 'DEPOSIT' || form.type === 'TRANSFER'
 
-  // auto-fill desc khi chon from account
   const handleFromChange = (v: string) => {
-    const fromAcct = activeAccounts.find(a => a.id === Number(v))
     setForm(f => ({
       ...f,
       fromAccountId: Number(v),
-      description: f.description || fromAcct?.customerName || '',
     }))
   }
 
@@ -256,7 +246,13 @@ export default function TransactionsPage() {
                     value={form.fromAccountId?.toString() ?? ''}
                     onValueChange={handleFromChange}
                   >
-                    <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account">
+                        {form.fromAccountId
+                          ? (() => { const a = activeAccounts.find(a => a.id === form.fromAccountId); return a ? `${a.accountNumber} — ${fmtVnd(a.balance)}` : 'Select account' })()
+                          : 'Select account'}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {activeAccounts.map(a => (
                         <SelectItem key={a.id} value={a.id.toString()}>
