@@ -1,136 +1,211 @@
--- customer
-CREATE TABLE customer (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    phone VARCHAR(20),
-    address VARCHAR(500),
-    location VARCHAR(100) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+-- BVB core banking initial schema. Matches JPA entities (UUID PK + audit fields).
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =========================================================================
+-- customer_types
+-- =========================================================================
+CREATE TABLE customer_types (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code                 VARCHAR(50)  NOT NULL UNIQUE,
+    name                 VARCHAR(100) NOT NULL,
+    single_txn_limit     NUMERIC(19, 2),
+    daily_txn_limit      NUMERIC(19, 2),
+    monthly_txn_limit    NUMERIC(19, 2),
+    fee_rate             NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    created_at           TIMESTAMPTZ  NOT NULL,
+    updated_at           TIMESTAMPTZ,
+    created_by           VARCHAR(100),
+    updated_by           VARCHAR(100),
+    version              BIGINT       NOT NULL DEFAULT 0
 );
 
--- customer_type
-CREATE TABLE customer_type (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
-    txn_limit NUMERIC(19,2) NOT NULL,
-    daily_limit NUMERIC(19,2) NOT NULL,
-    max_txn_per_day INTEGER NOT NULL DEFAULT 20,
-    description VARCHAR(255)
+INSERT INTO customer_types (code, name, single_txn_limit, daily_txn_limit, monthly_txn_limit, fee_rate, created_at)
+VALUES ('INDIVIDUAL', 'Cá nhân',       100000000,   500000000,  5000000000,  0.0010, NOW()),
+       ('CORPORATE',  'Doanh nghiệp', 5000000000, 20000000000, 100000000000, 0.0005, NOW()),
+       ('VIP',        'VIP',          1000000000,  5000000000,  50000000000, 0.0000, NOW());
+
+
+-- =========================================================================
+-- customers
+-- =========================================================================
+CREATE TABLE customers (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_code        VARCHAR(20)  NOT NULL UNIQUE,
+    full_name            VARCHAR(200) NOT NULL,
+    id_number            VARCHAR(30)  NOT NULL UNIQUE,
+    email                VARCHAR(150) NOT NULL,
+    phone                VARCHAR(20)  NOT NULL,
+    address              VARCHAR(255),
+    location             VARCHAR(100),
+    date_of_birth        DATE,
+    customer_type_id     UUID REFERENCES customer_types(id),
+    created_at           TIMESTAMPTZ  NOT NULL,
+    updated_at           TIMESTAMPTZ,
+    created_by           VARCHAR(100),
+    updated_by           VARCHAR(100),
+    deleted_at           TIMESTAMPTZ,
+    version              BIGINT       NOT NULL DEFAULT 0
 );
 
-INSERT INTO customer_type (name, txn_limit, daily_limit, max_txn_per_day, description) VALUES
-    ('INDIVIDUAL', 50000000, 200000000, 20, 'Ca nhan'),
-    ('ENTERPRISE', 500000000, 5000000000, 100, 'Doanh nghiep');
+CREATE INDEX idx_customers_type_active   ON customers(customer_type_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_customers_location      ON customers(location)          WHERE deleted_at IS NULL;
+CREATE INDEX idx_customers_email         ON customers(email)             WHERE deleted_at IS NULL;
 
-ALTER TABLE customer ADD COLUMN customer_type_id BIGINT NOT NULL DEFAULT 1 REFERENCES customer_type(id);
 
--- account
-CREATE TABLE account (
-    id BIGSERIAL PRIMARY KEY,
-    account_number VARCHAR(20) UNIQUE NOT NULL,
-    customer_id BIGINT NOT NULL REFERENCES customer(id),
-    balance NUMERIC(19,2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
-    transaction_limit NUMERIC(19,2) NOT NULL DEFAULT 50000000,
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    opened_at TIMESTAMPTZ DEFAULT NOW(),
-    version INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =========================================================================
+-- users + user_roles  (identity, separate from customer)
+-- =========================================================================
+CREATE TABLE users (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username                 VARCHAR(64)  NOT NULL UNIQUE,
+    password_hash            VARCHAR(255) NOT NULL,
+    enabled                  BOOLEAN      NOT NULL DEFAULT TRUE,
+    account_locked           BOOLEAN      NOT NULL DEFAULT FALSE,
+    failed_login_attempts    INT          NOT NULL DEFAULT 0,
+    locked_until             TIMESTAMPTZ,
+    last_login_at            TIMESTAMPTZ,
+    customer_id              UUID REFERENCES customers(id),
+    created_at               TIMESTAMPTZ  NOT NULL,
+    updated_at               TIMESTAMPTZ,
+    created_by               VARCHAR(100),
+    updated_by               VARCHAR(100),
+    version                  BIGINT       NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_account_customer ON account(customer_id);
-CREATE INDEX idx_account_status ON account(status);
 
--- transaction
-CREATE TABLE transaction (
-    id BIGSERIAL PRIMARY KEY,
-    from_account_id BIGINT REFERENCES account(id),
-    to_account_id BIGINT REFERENCES account(id),
-    type VARCHAR(20) NOT NULL,
-    amount NUMERIC(19,2) NOT NULL CHECK (amount > 0),
-    fee NUMERIC(19,2) NOT NULL DEFAULT 0,
-    location VARCHAR(100),
-    description VARCHAR(500),
-    idempotency_key VARCHAR(64) UNIQUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE INDEX idx_users_customer ON users(customer_id);
+
+CREATE TABLE user_roles (
+    user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role        VARCHAR(20) NOT NULL,
+    PRIMARY KEY (user_id, role)
 );
-CREATE INDEX idx_txn_from ON transaction(from_account_id, created_at);
-CREATE INDEX idx_txn_to ON transaction(to_account_id, created_at);
-CREATE INDEX idx_txn_type ON transaction(type);
-CREATE INDEX idx_txn_created ON transaction(created_at);
 
--- app_user
-CREATE TABLE app_user (
-    id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'CUSTOMER',
-    customer_id BIGINT REFERENCES customer(id),
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+
+-- =========================================================================
+-- accounts
+-- =========================================================================
+CREATE TABLE accounts (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_number       VARCHAR(20)  NOT NULL UNIQUE,
+    customer_id          UUID         NOT NULL REFERENCES customers(id),
+    account_type         VARCHAR(20)  NOT NULL,
+    status               VARCHAR(20)  NOT NULL,
+    balance              NUMERIC(19, 2) NOT NULL DEFAULT 0,
+    transaction_limit    NUMERIC(19, 2),
+    currency             VARCHAR(3)   NOT NULL,
+    opened_at            TIMESTAMPTZ  NOT NULL,
+    closed_at            TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ  NOT NULL,
+    updated_at           TIMESTAMPTZ,
+    created_by           VARCHAR(100),
+    updated_by           VARCHAR(100),
+    deleted_at           TIMESTAMPTZ,
+    version              BIGINT       NOT NULL DEFAULT 0,
+
+    CONSTRAINT chk_accounts_balance CHECK (balance >= 0),
+    CONSTRAINT chk_accounts_status  CHECK (status IN ('ACTIVE', 'FROZEN', 'CLOSED'))
 );
-CREATE INDEX idx_user_username ON app_user(username);
 
+CREATE INDEX idx_accounts_customer ON accounts(customer_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_accounts_status   ON accounts(status)       WHERE deleted_at IS NULL;
+
+
+-- =========================================================================
 -- account_status_history
+-- =========================================================================
 CREATE TABLE account_status_history (
-    id BIGSERIAL PRIMARY KEY,
-    account_id BIGINT NOT NULL REFERENCES account(id),
-    old_status VARCHAR(20),
-    new_status VARCHAR(20) NOT NULL,
-    reason VARCHAR(500),
-    changed_by VARCHAR(50),
-    changed_at TIMESTAMPTZ DEFAULT NOW()
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id           UUID         NOT NULL REFERENCES accounts(id),
+    from_status          VARCHAR(20),
+    to_status            VARCHAR(20)  NOT NULL,
+    reason               VARCHAR(500),
+    created_at           TIMESTAMPTZ  NOT NULL,
+    updated_at           TIMESTAMPTZ,
+    created_by           VARCHAR(100),
+    updated_by           VARCHAR(100),
+    version              BIGINT       NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_ash_account ON account_status_history(account_id);
 
--- scheduled_transaction
-CREATE TABLE scheduled_transaction (
-    id BIGSERIAL PRIMARY KEY,
-    uuid UUID NOT NULL DEFAULT gen_random_uuid(),
-    account_id BIGINT NOT NULL REFERENCES account(id),
-    to_account_id BIGINT REFERENCES account(id),
-    type VARCHAR(20) NOT NULL,
-    amount NUMERIC(19,2) NOT NULL,
-    cron_expression VARCHAR(50) NOT NULL,
-    description VARCHAR(500),
-    active BOOLEAN DEFAULT TRUE,
-    next_run_at TIMESTAMPTZ,
-    last_run_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE INDEX idx_account_status_history_account_time
+    ON account_status_history(account_id, created_at DESC);
+
+
+-- =========================================================================
+-- transactions
+-- =========================================================================
+CREATE TABLE transactions (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tx_code                  VARCHAR(30)  NOT NULL UNIQUE,
+    source_account_id        UUID REFERENCES accounts(id),
+    destination_account_id   UUID REFERENCES accounts(id),
+    type                     VARCHAR(20)  NOT NULL,
+    status                   VARCHAR(20)  NOT NULL,
+    amount                   NUMERIC(19, 2) NOT NULL,
+    fee                      NUMERIC(19, 2),
+    currency                 VARCHAR(3)   NOT NULL,
+    location                 VARCHAR(128),
+    description              VARCHAR(500),
+    idempotency_key          VARCHAR(64),
+    executed_at              TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ  NOT NULL,
+    updated_at               TIMESTAMPTZ,
+    created_by               VARCHAR(100),
+    updated_by               VARCHAR(100),
+    version                  BIGINT       NOT NULL DEFAULT 0,
+
+    CONSTRAINT chk_transactions_amount CHECK (amount > 0),
+    CONSTRAINT chk_transactions_fee    CHECK (fee IS NULL OR fee >= 0)
 );
-CREATE UNIQUE INDEX idx_sched_txn_uuid ON scheduled_transaction(uuid);
-CREATE INDEX idx_sched_active ON scheduled_transaction(next_run_at) WHERE active = TRUE;
 
--- fraud_alert
-CREATE TABLE fraud_alert (
-    id BIGSERIAL PRIMARY KEY,
-    transaction_id BIGINT NOT NULL REFERENCES transaction(id),
-    rule_name VARCHAR(100) NOT NULL,
-    reason VARCHAR(500) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    reviewed_by VARCHAR(50),
-    reviewed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE UNIQUE INDEX idx_tx_idempotency_key
+    ON transactions(idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX idx_tx_source_created      ON transactions(source_account_id, created_at);
+CREATE INDEX idx_tx_dest_created        ON transactions(destination_account_id, created_at);
+CREATE INDEX idx_tx_status_created      ON transactions(status, created_at DESC)
+    WHERE status IN ('PENDING', 'FAILED');
+
+
+-- =========================================================================
+-- recurring_transactions
+-- =========================================================================
+CREATE TABLE recurring_transactions (
+    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_account_id        UUID         NOT NULL REFERENCES accounts(id),
+    destination_account_id   UUID         NOT NULL REFERENCES accounts(id),
+    amount                   NUMERIC(19, 2) NOT NULL,
+    cron_expression          VARCHAR(50)  NOT NULL,
+    next_run_at              TIMESTAMPTZ  NOT NULL,
+    last_run_at              TIMESTAMPTZ,
+    enabled                  BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at               TIMESTAMPTZ  NOT NULL,
+    updated_at               TIMESTAMPTZ,
+    created_by               VARCHAR(100),
+    updated_by               VARCHAR(100),
+    version                  BIGINT       NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_alert_status ON fraud_alert(status);
-CREATE INDEX idx_alert_txn ON fraud_alert(transaction_id);
 
--- seed: customers
-INSERT INTO customer (name, email, phone, address, location, customer_type_id) VALUES
-    ('Nguyen Van A', 'nguyenvana@email.com', '0901234567', '123 Le Loi, Q1', 'HCM', 1),
-    ('Tran Thi B', 'tranthib@email.com', '0912345678', '456 Hai Ba Trung, Q3', 'HCM', 1),
-    ('Cong Ty ABC', 'abc@corp.vn', '0283456789', '789 Nguyen Hue, Q1', 'HCM', 2);
+CREATE INDEX idx_recurring_due
+    ON recurring_transactions(next_run_at) WHERE enabled = TRUE;
+CREATE INDEX idx_recurring_source ON recurring_transactions(source_account_id);
 
--- seed: accounts
-INSERT INTO account (account_number, customer_id, balance, transaction_limit, status) VALUES
-    ('1001000001', 1, 50000000, 50000000, 'ACTIVE'),
-    ('1001000002', 2, 100000000, 50000000, 'ACTIVE'),
-    ('1001000003', 3, 500000000, 500000000, 'ACTIVE');
 
--- seed: users (all passwords = admin123, same bcrypt hash)
-INSERT INTO app_user (username, password, role, customer_id) VALUES
-    ('admin', '$2b$10$xrc4KygY19ukeFPNWj1sy.JUWoBqWUmKe6Mixy8TL9zDufA79IXtq', 'ADMIN', NULL),
-    ('customer1', '$2b$10$xrc4KygY19ukeFPNWj1sy.JUWoBqWUmKe6Mixy8TL9zDufA79IXtq', 'CUSTOMER', 1),
-    ('customer2', '$2b$10$xrc4KygY19ukeFPNWj1sy.JUWoBqWUmKe6Mixy8TL9zDufA79IXtq', 'CUSTOMER', 2),
-    ('enterprise1', '$2b$10$xrc4KygY19ukeFPNWj1sy.JUWoBqWUmKe6Mixy8TL9zDufA79IXtq', 'CUSTOMER', 3);
+-- =========================================================================
+-- alerts
+-- =========================================================================
+CREATE TABLE alerts (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id       UUID REFERENCES transactions(id),
+    rule_code            VARCHAR(50)  NOT NULL,
+    severity             VARCHAR(20)  NOT NULL,
+    message              VARCHAR(500) NOT NULL,
+    resolved             BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at           TIMESTAMPTZ  NOT NULL,
+    updated_at           TIMESTAMPTZ,
+    created_by           VARCHAR(100),
+    updated_by           VARCHAR(100),
+    version              BIGINT       NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_alerts_unresolved ON alerts(created_at DESC) WHERE resolved = FALSE;
+CREATE INDEX idx_alerts_severity   ON alerts(severity, created_at DESC);

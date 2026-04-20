@@ -1,16 +1,13 @@
-"use client"
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import {
+  SESSION_COOKIE,
+  parseSession,
+  sessionLandingPath,
+} from "@/lib/auth/session-read";
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useAuthStore } from "@/lib/stores/auth-store"
-
-export default function Home() {
-  const router = useRouter()
-  const token = useAuthStore((s) => s.token)
-
-  useEffect(() => {
-    router.replace(token ? "/dashboard" : "/login")
-  }, [token, router])
-
-  return null
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const session = parseSession(cookieStore.get(SESSION_COOKIE)?.value);
+  redirect(session ? sessionLandingPath(session) : "/login");
 }

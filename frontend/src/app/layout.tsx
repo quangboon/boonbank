@@ -1,21 +1,29 @@
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import "./globals.css"
-import { Providers } from "./providers"
+import type { Metadata } from "next";
+import { Inter, Geist } from "next/font/google";
+import "./globals.css";
+import { Providers } from "./providers";
+import { cn } from "@/lib/utils";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "vietnamese"],
+});
 
 export const metadata: Metadata = {
-  title: "Boon Bank",
-  description: "Boon Bank Management System",
-}
+  title: "Banking",
+  description: "Bảng điều khiển nội bộ ngân hàng",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full bg-background text-foreground">
+    <html lang="vi" className={cn("h-full", "antialiased", inter.variable, "font-sans", geist.variable)}>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers>{children}</Providers>
       </body>
     </html>
-  )
+  );
 }

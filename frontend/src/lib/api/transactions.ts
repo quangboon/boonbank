@@ -1,28 +1,69 @@
-import { api } from '@/lib/api-client'
-import type { Page, Transaction, TransactionRequest, TransactionType } from '@/types'
+import { api, unwrap } from "./client";
+import { ENDPOINTS } from "./endpoints";
+import type { PageResponse } from "./types";
+import type {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from "@/types/domain";
 
-export const getTransactions = (page = 0) =>
-  api<Page<Transaction>>(`/api/v1/transactions?page=${page}`)
+export type TransferReq = {
+  sourceAccountNumber: string;
+  destinationAccountNumber: string;
+  amount: string;
+  currency: string;
+  location?: string;
+  description?: string;
+};
 
-export const execute = (data: TransactionRequest) =>
-  api<Transaction>('/api/v1/transactions', { method: 'POST', body: JSON.stringify(data) })
+export type CashReq = {
+  accountNumber: string;
+  amount: string;
+  location?: string;
+  description?: string;
+};
 
-export interface TxnSearchParams {
-  type?: TransactionType
-  amountMin?: number
-  amountMax?: number
-  from?: string
-  to?: string
-  page?: number
+export type TransactionSearchParams = {
+  accountId?: string;
+  type?: TransactionType;
+  status?: TransactionStatus;
+  minAmount?: string;
+  maxAmount?: string;
+  from?: string;
+  to?: string;
+  location?: string;
+  page?: number;
+  size?: number;
+  sort?: string;
+};
+
+const IDEMPOTENCY_HEADER = "Idempotency-Key";
+
+function idempotentHeader(key: string) {
+  return { [IDEMPOTENCY_HEADER]: key };
 }
 
-export const searchTransactions = (params: TxnSearchParams) => {
-  const qs = new URLSearchParams()
-  if (params.type) qs.set('type', params.type)
-  if (params.amountMin != null) qs.set('amountMin', String(params.amountMin))
-  if (params.amountMax != null) qs.set('amountMax', String(params.amountMax))
-  if (params.from) qs.set('from', params.from)
-  if (params.to) qs.set('to', params.to)
-  qs.set('page', String(params.page ?? 0))
-  return api<Page<Transaction>>(`/api/v1/transactions/search?${qs}`)
-}
+export const transactionsApi = {
+  search: (params: TransactionSearchParams) =>
+    unwrap<PageResponse<Transaction>>(
+      api.get(ENDPOINTS.transactions, { params }),
+    ),
+  transfer: (req: TransferReq, idempotencyKey: string) =>
+    unwrap<Transaction>(
+      api.post(ENDPOINTS.transfer, req, {
+        headers: idempotentHeader(idempotencyKey),
+      }),
+    ),
+  withdraw: (req: CashReq, idempotencyKey: string) =>
+    unwrap<Transaction>(
+      api.post(ENDPOINTS.withdraw, req, {
+        headers: idempotentHeader(idempotencyKey),
+      }),
+    ),
+  deposit: (req: CashReq, idempotencyKey: string) =>
+    unwrap<Transaction>(
+      api.post(ENDPOINTS.deposit, req, {
+        headers: idempotentHeader(idempotencyKey),
+      }),
+    ),
+};

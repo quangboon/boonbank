@@ -1,18 +1,18 @@
 package com.boon.bank;
 
+import com.boon.bank.config.properties.BalanceTierProperties;
+import com.boon.bank.config.properties.GeoAnomalyProperties;
+import com.boon.bank.config.properties.ReportProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableCaching
-@EnableAsync
-@EnableScheduling
+@EnableConfigurationProperties({BalanceTierProperties.class, ReportProperties.class, GeoAnomalyProperties.class})
 public class BankApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(BankApplication.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(BankApplication.class, args);
+	}
+
 }

@@ -1,7 +1,11 @@
 package com.boon.bank.repository;
 
-import com.boon.bank.entity.CustomerType;
+import com.boon.bank.entity.customer.CustomerType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface CustomerTypeRepository extends JpaRepository<CustomerType, Long> {
+import java.util.Optional;
+import java.util.UUID;
+
+public interface CustomerTypeRepository extends JpaRepository<CustomerType, UUID> {
+    Optional<CustomerType> findByCode(String code);
 }

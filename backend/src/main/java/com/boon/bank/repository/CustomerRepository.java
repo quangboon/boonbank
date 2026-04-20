@@ -1,20 +1,27 @@
 package com.boon.bank.repository;
 
-import com.boon.bank.entity.Customer;
-import com.boon.bank.repository.projection.LocationStatsProjection;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
-import java.util.List;
+import com.boon.bank.entity.customer.Customer;
+import com.boon.bank.repository.projection.LocationCustomerCount;
 
-public interface CustomerRepository extends JpaRepository<Customer, Long>,
-        JpaSpecificationExecutor<Customer> {
-    boolean existsByEmail(String email);
+public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSpecificationExecutor<Customer> {
 
-    @Query(value = "SELECT COALESCE(location, 'Unknown') AS location, COUNT(*) AS customer_count " +
-            "FROM customer GROUP BY location ORDER BY COUNT(*) DESC", nativeQuery = true)
-    List<LocationStatsProjection> findCustomersByLocation();
+
+    boolean existsByIdNumber(String idNumber);
+
+    @Query("""
+            select c.location as city, count(c) as customerCount
+            from Customer c
+            where c.deletedAt is null and c.location is not null
+            group by c.location
+            order by customerCount desc
+            """)
+    List<LocationCustomerCount> groupByLocation();
 }

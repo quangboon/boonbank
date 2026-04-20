@@ -1,68 +1,41 @@
 package com.boon.bank.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.scripting.support.ResourceScriptSource;
 
 import java.time.Duration;
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Configuration
+@EnableCaching
 public class RedisConfig {
 
     @Bean
-    StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {
-        return new StringRedisTemplate(factory);
+    @Primary
+    @ConditionalOnProperty(name = "spring.cache.type", havingValue = "caffeine", matchIfMissing = true)
+    public CacheManager caffeineCacheManager() {
+        CaffeineCacheManager mgr = new CaffeineCacheManager(
+                "customers", "accounts", "fxRates", "customerTypes", "account-lookup");
+        mgr.setCaffeine(Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(5, TimeUnit.MINUTES));
+        return mgr;
     }
 
-    @Bean
-    CacheManager cacheManager(RedisConnectionFactory factory) {
-        var ptv = BasicPolymorphicTypeValidator.builder()
-                .allowIfBaseType(Object.class)
-                .build();
-        var om = new ObjectMapper();
-        om.registerModule(new JavaTimeModule());
-        om.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        om.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING);
-        var jsonSerializer = RedisSerializationContext.SerializationPair
-                .fromSerializer(new GenericJackson2JsonRedisSerializer(om));
-
-        var defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(5))
-                .serializeValuesWith(jsonSerializer)
-                .disableCachingNullValues();
-
-        var cacheConfigs = Map.of(
-                "customers", defaultConfig.entryTtl(Duration.ofMinutes(10)),
-                "accounts", defaultConfig.entryTtl(Duration.ofMinutes(5)),
-                "statistics", defaultConfig.entryTtl(Duration.ofMinutes(3))
-        );
-
-        return RedisCacheManager.builder(factory)
-                .cacheDefaults(defaultConfig)
-                .withInitialCacheConfigurations(cacheConfigs)
-                .build();
-    }
-
-    @Bean
-    DefaultRedisScript<Long> rateLimitScript() {
-        var script = new DefaultRedisScript<Long>();
-        script.setScriptSource(new ResourceScriptSource(
-                new ClassPathResource("scripts/sliding-window-rate-limit.lua")));
-        script.setResultType(Long.class);
-        return script;
+    @Bean(name = "appRedisCacheManager")
+    @ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis")
+    public CacheManager appRedisCacheManager(RedisConnectionFactory factory) {
+        RedisCacheConfiguration cfg = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofMinutes(30));
+        return RedisCacheManager.builder(factory).cacheDefaults(cfg).build();
     }
 }

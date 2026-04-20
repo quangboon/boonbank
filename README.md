@@ -21,13 +21,27 @@ docker compose up postgres redis -d
 # 2. Run backend (JDK 21 required)
 cd backend && ./mvnw spring-boot:run
 
-# 3. Run frontend
-cd frontend && npm install && npm run dev
+# 3. Run frontend (Node 20+, pnpm 10+)
+cd frontend
+pnpm install
+cp .env.example .env.local    # sửa NEXT_PUBLIC_API_BASE_URL nếu cần
+pnpm dev                      # Turbopack dev server
 ```
 
 Backend: http://localhost:8080  
 Frontend: http://localhost:3000  
 Swagger: http://localhost:8080/swagger-ui.html
+
+### Frontend scripts
+
+```bash
+cd frontend
+pnpm dev          # dev server (Turbopack, hot reload)
+pnpm build        # production build (standalone output)
+pnpm start        # chạy bản production đã build
+pnpm lint         # ESLint
+pnpm typecheck    # tsc --noEmit
+```
 
 ### Docker (all-in-one)
 

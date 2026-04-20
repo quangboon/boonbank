@@ -1,54 +1,105 @@
 package com.boon.bank.repository;
 
-import com.boon.bank.entity.Transaction;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Stream;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
-import com.boon.bank.repository.projection.PeriodStatsProjection;
+import com.boon.bank.entity.enums.TransactionStatus;
+import com.boon.bank.entity.transaction.Transaction;
+import com.boon.bank.repository.custom.TransactionRepositoryCustom;
+import com.boon.bank.repository.projection.BalanceTierCount;
 
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Optional;
+import jakarta.persistence.QueryHint;
 
-public interface TransactionRepository extends JpaRepository<Transaction, Long>,
-        JpaSpecificationExecutor<Transaction> {
-    Optional<Transaction> findByIdempotencyKey(String key);
-    Page<Transaction> findByFromAccountIdOrToAccountId(Long fromId, Long toId, Pageable pageable);
-    Page<Transaction> findByFromAccountIdInOrToAccountIdIn(List<Long> fromIds, List<Long> toIds, Pageable pageable);
+public interface TransactionRepository
+        extends JpaRepository<Transaction, UUID>,
+                JpaSpecificationExecutor<Transaction>,
+                TransactionRepositoryCustom {
 
-    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t " +
-           "WHERE t.fromAccount.id = :acctId AND t.createdAt >= :since")
-    BigDecimal sumAmountByAccountSince(@Param("acctId") Long acctId, @Param("since") OffsetDateTime since);
+    Optional<Transaction> findByTxCode(String txCode);
 
-    @Query("SELECT COUNT(t) FROM Transaction t " +
-           "WHERE t.fromAccount.id = :acctId AND t.createdAt >= :since")
-    long countByAccountSince(@Param("acctId") Long acctId, @Param("since") OffsetDateTime since);
+    Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
 
-    @Query("SELECT COUNT(t) FROM Transaction t WHERE t.createdAt BETWEEN :from AND :to")
-    long countByDateRange(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
+    @Override
+    @EntityGraph(attributePaths = {"sourceAccount", "destinationAccount"})
+    Page<Transaction> findAll(Specification<Transaction> spec, Pageable pageable);
 
-    @Query("SELECT t FROM Transaction t LEFT JOIN FETCH t.fromAccount LEFT JOIN FETCH t.toAccount " +
-           "WHERE t.createdAt BETWEEN :from AND :to ORDER BY t.createdAt")
-    List<Transaction> findForReport(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to, Pageable pageable);
+    long countBySourceAccount_IdAndCreatedAtBetween(UUID accountId, Instant from, Instant to);
+
+    @Query("""
+            select coalesce(sum(t.amount), 0)
+            from Transaction t
+            where t.sourceAccount.id = :accountId
+              and t.status = :status
+              and t.createdAt >= :from
+              and t.createdAt < :to
+            """)
+    BigDecimal sumDebitBetween(@Param("status") TransactionStatus status,
+                               @Param("accountId") UUID accountId,
+                               @Param("from") Instant from,
+                               @Param("to") Instant to);
 
     @Query(value = """
-            SELECT date_trunc(:period, t.created_at) AS period,
-                   COUNT(*) AS cnt,
-                   AVG(t.amount) AS avg_amt,
-                   MAX(t.amount) AS max_amt,
-                   MIN(t.amount) AS min_amt,
-                   COALESCE(SUM(t.fee), 0) AS total_fees
-            FROM transaction t
-            WHERE t.created_at BETWEEN :fromDate AND :toDate
-            GROUP BY period ORDER BY period
+            SELECT CASE
+                       WHEN a.balance >= :highMin THEN 'HIGH'
+                       WHEN a.balance >= :midMin  THEN 'MID'
+                       ELSE 'LOW'
+                   END AS tier,
+                   COUNT(t.id) AS count
+            FROM transactions t
+            JOIN accounts a ON t.source_account_id = a.id
+            WHERE a.deleted_at IS NULL
+            GROUP BY tier
             """, nativeQuery = true)
-    List<PeriodStatsProjection> findPeriodStats(
-            @Param("period") String period,
-            @Param("fromDate") OffsetDateTime fromDate,
-            @Param("toDate") OffsetDateTime toDate);
+    List<BalanceTierCount> countByBalanceTier(@Param("highMin") BigDecimal highMin,
+                                              @Param("midMin") BigDecimal midMin);
+
+    @QueryHints(@QueryHint(name = "org.hibernate.fetchSize", value = "100"))
+    @Query("""
+            select t from Transaction t
+            left join fetch t.sourceAccount
+            left join fetch t.destinationAccount
+            where (t.sourceAccount.id = :accountId or t.destinationAccount.id = :accountId)
+              and t.createdAt >= :from and t.createdAt < :to
+            order by t.createdAt asc
+            """)
+    Stream<Transaction> streamReportRows(@Param("accountId") UUID accountId,
+                                          @Param("from") Instant from,
+                                          @Param("to") Instant to);
+
+    @Query("""
+            select count(t) from Transaction t
+            where (t.sourceAccount.id = :accountId or t.destinationAccount.id = :accountId)
+              and t.createdAt >= :from and t.createdAt < :to
+            """)
+    long countReportRows(@Param("accountId") UUID accountId,
+                         @Param("from") Instant from,
+                         @Param("to") Instant to);
+
+    @Query(value = """
+            SELECT location FROM (
+                SELECT DISTINCT ON (location) location, created_at AS ts
+                FROM transactions
+                WHERE source_account_id = :accountId
+                  AND location IS NOT NULL
+                ORDER BY location, created_at DESC
+            ) per_loc
+            ORDER BY ts DESC
+            LIMIT :n
+            """, nativeQuery = true)
+    List<String> findRecentDistinctLocations(@Param("accountId") UUID accountId,
+                                             @Param("n") int limit);
 }

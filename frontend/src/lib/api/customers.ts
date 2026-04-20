@@ -1,32 +1,47 @@
-import { api } from '@/lib/api-client'
-import type { Customer, CustomerRequest, Page } from '@/types'
+import { api, unwrap } from "./client";
+import { ENDPOINTS } from "./endpoints";
+import type { PageResponse } from "./types";
+import type { Customer } from "@/types/domain";
 
-export const getCustomers = (page = 0) =>
-  api<Page<Customer>>(`/api/v1/customers?page=${page}`)
+export type CustomerCreateReq = {
+  fullName: string;
+  idNumber: string;
+  email: string;
+  phone: string;
+  address?: string;
+  location?: string;
+  dateOfBirth?: string;
+  customerTypeCode?: string;
+};
 
-export interface CustomerSearchParams {
-  name?: string
-  email?: string
-  phone?: string
-  location?: string
-  page?: number
-}
+export type CustomerUpdateReq = Partial<
+  Pick<
+    CustomerCreateReq,
+    "fullName" | "email" | "phone" | "address" | "location" | "customerTypeCode"
+  >
+>;
 
-export const searchCustomers = (params: CustomerSearchParams) => {
-  const q = new URLSearchParams()
-  if (params.name) q.set('name', params.name)
-  if (params.email) q.set('email', params.email)
-  if (params.phone) q.set('phone', params.phone)
-  if (params.location) q.set('location', params.location)
-  q.set('page', String(params.page ?? 0))
-  return api<Page<Customer>>(`/api/v1/customers/search?${q.toString()}`)
-}
+export type CustomerSearchParams = {
+  keyword?: string;
+  location?: string;
+  customerTypeCode?: string;
+  page?: number;
+  size?: number;
+  sort?: string;
+};
 
-export const createCustomer = (data: CustomerRequest) =>
-  api<Customer>('/api/v1/customers', { method: 'POST', body: JSON.stringify(data) })
+export type CustomerCreateRes = {
+  customer: Customer;
+  credentials: { username: string; tempPassword: string };
+};
 
-export const updateCustomer = (id: number, data: CustomerRequest) =>
-  api<Customer>(`/api/v1/customers/${id}`, { method: 'PUT', body: JSON.stringify(data) })
-
-export const deleteCustomer = (id: number) =>
-  api<void>(`/api/v1/customers/${id}`, { method: 'DELETE' })
+export const customersApi = {
+  list: (params: CustomerSearchParams) =>
+    unwrap<PageResponse<Customer>>(api.get(ENDPOINTS.customers, { params })),
+  get: (id: string) => unwrap<Customer>(api.get(`${ENDPOINTS.customers}/${id}`)),
+  create: (req: CustomerCreateReq) =>
+    unwrap<CustomerCreateRes>(api.post(ENDPOINTS.customers, req)),
+  update: (id: string, req: CustomerUpdateReq) =>
+    unwrap<Customer>(api.put(`${ENDPOINTS.customers}/${id}`, req)),
+  delete: (id: string) => api.delete(`${ENDPOINTS.customers}/${id}`),
+};

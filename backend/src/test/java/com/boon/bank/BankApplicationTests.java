@@ -1,24 +1,18 @@
 package com.boon.bank;
 
-import javax.crypto.KeyGenerator;
-import java.util.Base64;
-
+import com.boon.bank.support.TestcontainersConfiguration;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
+@SpringBootTest
+@Import(TestcontainersConfiguration.class)
+@ActiveProfiles("test")
 class BankApplicationTests {
 
-    @Test
-    void generateJwtSecret() throws Exception {
-        // HS512 = 512-bit key = 64 bytes (do dai toi da cho HMAC-SHA)
-        KeyGenerator kg = KeyGenerator.getInstance("HmacSHA512");
-        kg.init(512);
-        var key = kg.generateKey();
-        String base64Secret = Base64.getEncoder().encodeToString(key.getEncoded());
+	@Test
+	void contextLoads() {
+	}
 
-        System.out.println("===========================================");
-        System.out.println("JWT SECRET (HS512 - 512-bit / 64 bytes):");
-        System.out.println(base64Secret);
-        System.out.println("Do dai: " + base64Secret.length() + " ky tu");
-        System.out.println("===========================================");
-    }
 }
