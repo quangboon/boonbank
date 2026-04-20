@@ -1,13 +1,9 @@
 package com.boon.bank.controller.v1;
 
-import com.boon.bank.dto.common.ApiResponse;
-import com.boon.bank.dto.response.statistics.TransactionPeriodStatsRes;
-import com.boon.bank.entity.enums.PeriodUnit;
-import com.boon.bank.service.report.ExcelReportService;
-import com.boon.bank.service.report.PdfReportService;
-import com.boon.bank.service.report.StatisticsService;
-import com.boon.bank.service.security.OwnershipService;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -19,9 +15,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.time.LocalDate;
-import java.util.List;
-import java.util.UUID;
+import com.boon.bank.dto.common.ApiResponse;
+import com.boon.bank.dto.response.statistics.TransactionPeriodStatsRes;
+import com.boon.bank.entity.enums.PeriodUnit;
+import com.boon.bank.exception.business.ForbiddenException;
+import com.boon.bank.service.report.ExcelReportService;
+import com.boon.bank.service.report.PdfReportService;
+import com.boon.bank.service.report.StatisticsService;
+import com.boon.bank.service.security.OwnershipService;
+
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -52,11 +55,16 @@ public class ReportController {
 
     @GetMapping("/transactions/summary")
     public ApiResponse<List<TransactionPeriodStatsRes>> summary(
-            @RequestParam UUID accountId,
+            @RequestParam(required = false) UUID accountId,
             @RequestParam PeriodUnit period,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        ownershipService.requireAccountOwned(accountId);
+                
+        if (accountId != null) {
+            ownershipService.requireAccountOwned(accountId);
+        } else if (!ownershipService.isStaff()) {
+            throw new ForbiddenException("accountId is required for non-staff users");
+        }
         return ApiResponse.ok(statisticsService.transactionsSummary(period, accountId, from, to));
     }
 

@@ -1,17 +1,8 @@
 package com.boon.bank.controller.v1;
 
-import com.boon.bank.dto.common.ApiResponse;
-import com.boon.bank.dto.common.PageResponse;
-import com.boon.bank.dto.request.account.AccountCreateReq;
-import com.boon.bank.dto.request.account.AccountSearchReq;
-import com.boon.bank.dto.request.account.AccountUpdateReq;
-import com.boon.bank.dto.response.account.AccountBalanceRes;
-import com.boon.bank.dto.response.account.AccountRes;
-import com.boon.bank.dto.response.account.AccountStatusHistoryRes;
-import com.boon.bank.service.account.AccountService;
-import com.boon.bank.service.security.OwnershipService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,8 +16,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.UUID;
+import com.boon.bank.dto.common.ApiResponse;
+import com.boon.bank.dto.common.PageResponse;
+import com.boon.bank.dto.request.account.AccountCreateReq;
+import com.boon.bank.dto.request.account.AccountSearchReq;
+import com.boon.bank.dto.request.account.AccountUpdateReq;
+import com.boon.bank.dto.response.account.AccountBalanceRes;
+import com.boon.bank.dto.response.account.AccountLookupRes;
+import com.boon.bank.dto.response.account.AccountRes;
+import com.boon.bank.dto.response.account.AccountStatusHistoryRes;
+import com.boon.bank.service.account.AccountService;
+import com.boon.bank.service.security.OwnershipService;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/accounts")
@@ -54,6 +57,11 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.ok(accountService.getBalance(accountNumber)));
     }
 
+    @GetMapping("/lookup")
+    public ResponseEntity<ApiResponse<AccountLookupRes>> lookup(@RequestParam String accountNumber) {
+        return ResponseEntity.ok(ApiResponse.ok(accountService.lookup(accountNumber)));
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<AccountRes>>> search(AccountSearchReq req, Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(accountService.search(req, pageable))));
@@ -70,6 +78,13 @@ public class AccountController {
     public ResponseEntity<ApiResponse<AccountRes>> freeze(@PathVariable UUID id,
                                                           @RequestParam String reason) {
         return ResponseEntity.ok(ApiResponse.ok(accountService.freeze(id, reason)));
+    }
+
+    @PostMapping("/{id}/unfreeze")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<AccountRes>> unfreeze(@PathVariable UUID id,
+                                                            @RequestParam String reason) {
+        return ResponseEntity.ok(ApiResponse.ok(accountService.unfreeze(id, reason)));
     }
 
     @PostMapping("/{id}/close")

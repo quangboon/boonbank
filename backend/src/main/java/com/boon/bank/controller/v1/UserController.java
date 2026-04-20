@@ -1,12 +1,8 @@
 package com.boon.bank.controller.v1;
 
-import com.boon.bank.dto.common.ApiResponse;
-import com.boon.bank.dto.common.PageResponse;
-import com.boon.bank.dto.request.user.UserCreateReq;
-import com.boon.bank.dto.response.user.UserRes;
-import com.boon.bank.service.user.UserService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,7 +13,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.UUID;
+import com.boon.bank.dto.common.ApiResponse;
+import com.boon.bank.dto.common.PageResponse;
+import com.boon.bank.dto.request.user.UserCreateReq;
+import com.boon.bank.dto.response.user.UserRes;
+import com.boon.bank.service.user.UserService;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -42,6 +45,11 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(userService.list(pageable))));
     }
 
+    @GetMapping("/by-customer/{customerId}")
+    public ResponseEntity<ApiResponse<List<UserRes>>> listByCustomer(@PathVariable UUID customerId) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.listByCustomer(customerId)));
+    }
+
     @PostMapping("/{id}/enable")
     public ResponseEntity<ApiResponse<Void>> enable(@PathVariable UUID id) {
         userService.enable(id);
@@ -52,5 +60,14 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> disable(@PathVariable UUID id) {
         userService.disable(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Disabled"));
+    }
+
+    public record ResetPasswordRes(String tempPassword) {}
+
+    @PostMapping("/{id}/reset-password")
+    public ResponseEntity<ApiResponse<ResetPasswordRes>> resetPassword(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                new ResetPasswordRes(userService.resetPassword(id)),
+                "Password reset"));
     }
 }

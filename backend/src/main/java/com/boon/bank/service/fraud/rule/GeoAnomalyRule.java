@@ -1,16 +1,18 @@
 package com.boon.bank.service.fraud.rule;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.stereotype.Component;
+
 import com.boon.bank.common.event.TransactionCompletedEvent;
 import com.boon.bank.config.properties.GeoAnomalyProperties;
 import com.boon.bank.entity.enums.AlertSeverity;
 import com.boon.bank.entity.transaction.Transaction;
 import com.boon.bank.repository.TransactionRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
@@ -44,9 +46,7 @@ public class GeoAnomalyRule implements FraudRule {
         List<String> history = transactionRepository.findRecentDistinctLocations(
                 sourceAccountId, props.historySize());
 
-        // Empty history = brand-new account, no baseline → do not alert (would be a
-        // false positive every time the account transacts for the first time). Once
-        // there is at least one historical location, any new location is anomalous.
+
         if (history.isEmpty() || history.contains(location)) {
             return Optional.empty();
         }

@@ -12,10 +12,33 @@ public record TransactionPeriodSummaryImpl(
         long cnt
 ) implements TransactionPeriodSummary {
 
-    @Override public OffsetDateTime getBucket()     { return bucket; }
-    @Override public BigDecimal getMinAmount()      { return minAmount; }
-    @Override public BigDecimal getMaxAmount()      { return maxAmount; }
-    @Override public BigDecimal getAvgAmount()      { return avgAmount; }
-    @Override public BigDecimal getSumAmount()      { return sumAmount; }
-    @Override public long getCnt()                  { return cnt; }
+    @Override
+    public OffsetDateTime getBucket() {
+        return bucket;
+    }
+
+    @Override
+    public BigDecimal getMinAmount() {
+        return minAmount;
+    }
+
+    @Override
+    public BigDecimal getMaxAmount() {
+        return maxAmount;
+    }
+
+    @Override
+    public BigDecimal getAvgAmount() {
+        return avgAmount;
+    }
+
+    @Override
+    public BigDecimal getSumAmount() {
+        return sumAmount;
+    }
+
+    @Override
+    public long getCnt() {
+        return cnt;
+    }
 }

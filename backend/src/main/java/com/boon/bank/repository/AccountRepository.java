@@ -1,23 +1,29 @@
 package com.boon.bank.repository;
 
-import com.boon.bank.entity.account.Account;
-import com.boon.bank.repository.projection.AccountTierCount;
-import com.boon.bank.repository.projection.BalanceTierCount;
-import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import com.boon.bank.entity.account.Account;
+import com.boon.bank.repository.projection.AccountTierCount;
+import com.boon.bank.repository.projection.BalanceTierCount;
+
+import jakarta.persistence.LockModeType;
 
 public interface AccountRepository extends JpaRepository<Account, UUID>, JpaSpecificationExecutor<Account> {
 
     Optional<Account> findByAccountNumber(String accountNumber);
+
+
+    long countByCustomerIdAndStatusNot(UUID customerId,
+                                       com.boon.bank.entity.enums.AccountStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Account a where a.id = :id")

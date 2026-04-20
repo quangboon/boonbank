@@ -1,6 +1,7 @@
 package com.boon.bank.mapper;
 
 import com.boon.bank.dto.response.account.AccountBalanceRes;
+import com.boon.bank.dto.response.account.AccountLookupRes;
 import com.boon.bank.dto.response.account.AccountRes;
 import com.boon.bank.entity.account.Account;
 import org.mapstruct.Mapper;
@@ -20,5 +21,13 @@ public interface AccountMapper {
                 a.getBalance(),
                 a.getCurrency(),
                 Instant.now());
+    }
+
+    default AccountLookupRes toLookup(Account a) {
+        return a == null ? null : new AccountLookupRes(
+                a.getAccountNumber(),
+                a.getCustomer().getFullName(),
+                a.getCurrency(),
+                a.getStatus());
     }
 }

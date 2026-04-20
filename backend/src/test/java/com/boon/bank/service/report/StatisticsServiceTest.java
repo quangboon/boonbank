@@ -25,11 +25,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StatisticsServiceTest {
 
-    @Mock AccountRepository accountRepository;
-    @Mock TransactionRepository transactionRepository;
-    @Mock CustomerRepository customerRepository;
+    @Mock
+    AccountRepository accountRepository;
+    @Mock
+    TransactionRepository transactionRepository;
+    @Mock
+    CustomerRepository customerRepository;
 
-    @InjectMocks StatisticsService service;
+    @InjectMocks
+    StatisticsService service;
 
     @Test
     void accountsByBalanceTier_passesConfiguredThresholds_andMapsProjection() {
@@ -75,8 +79,15 @@ class StatisticsServiceTest {
 
     private BalanceTierCount tierCount(String tier, long count) {
         return new BalanceTierCount() {
-            @Override public String getTier() { return tier; }
-            @Override public long getCount() { return count; }
+            @Override
+            public String getTier() {
+                return tier;
+            }
+
+            @Override
+            public long getCount() {
+                return count;
+            }
         };
     }
 }

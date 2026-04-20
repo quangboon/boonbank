@@ -1,5 +1,21 @@
 package com.boon.bank.controller.v1;
 
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.boon.bank.common.idempotency.IdempotentInterceptor;
 import com.boon.bank.dto.common.ApiResponse;
 import com.boon.bank.dto.common.PageResponse;
@@ -14,22 +30,9 @@ import com.boon.bank.security.SecurityUtil;
 import com.boon.bank.service.security.OwnershipService;
 import com.boon.bank.service.transaction.TransactionQueryService;
 import com.boon.bank.service.transaction.TransactionService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/transactions")
@@ -49,7 +52,9 @@ public class TransactionController {
         return ResponseEntity.ok(ApiResponse.ok(transactionService.transfer(req, idempotencyKey)));
     }
 
+
     @PostMapping("/withdraw")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<TransactionRes>> withdraw(
             @Valid @RequestBody WithdrawReq req,
             @RequestHeader(value = IdempotentInterceptor.HEADER, required = false) String idempotencyKey) {
@@ -58,6 +63,7 @@ public class TransactionController {
     }
 
     @PostMapping("/deposit")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<TransactionRes>> deposit(
             @Valid @RequestBody DepositReq req,
             @RequestHeader(value = IdempotentInterceptor.HEADER, required = false) String idempotencyKey) {

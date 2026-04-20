@@ -74,7 +74,8 @@ class RecurringTransactionNextRunTest {
                 mock(AccountRepository.class),
                 mock(TransactionService.class),
                 null, // self — only used by processDue(); not exercised here
-                fixed);
+                fixed,
+                mock(org.quartz.Scheduler.class));
     }
 
     private Instant invokeNextRun(RecurringTransactionServiceImpl svc,

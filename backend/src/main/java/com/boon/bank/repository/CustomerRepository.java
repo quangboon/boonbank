@@ -13,11 +13,8 @@ import com.boon.bank.repository.projection.LocationCustomerCount;
 
 public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSpecificationExecutor<Customer> {
 
-    Optional<Customer> findByCustomerCode(String customerCode);
 
-    Optional<Customer> findByIdNumber(String idNumber);
-
-    boolean existsByEmail(String email);
+    boolean existsByIdNumber(String idNumber);
 
     @Query("""
             select c.location as city, count(c) as customerCount

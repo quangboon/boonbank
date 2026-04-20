@@ -1,5 +1,25 @@
 package com.boon.bank.service.recurring.impl;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.UUID;
+
+import org.quartz.JobDetail;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
+import org.quartz.Trigger;
+import org.quartz.TriggerKey;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.support.CronExpression;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boon.bank.dto.request.recurring.RecurringTransactionCreateReq;
 import com.boon.bank.dto.request.recurring.RecurringTransactionUpdateReq;
 import com.boon.bank.dto.request.transaction.TransferReq;
@@ -15,24 +35,12 @@ import com.boon.bank.repository.AccountRepository;
 import com.boon.bank.repository.RecurringTransactionRepository;
 import com.boon.bank.security.SecurityUtil;
 import com.boon.bank.service.recurring.RecurringTransactionService;
+import com.boon.bank.service.scheduler.RecurringTriggerFactory;
 import com.boon.bank.service.transaction.TransactionService;
 import com.boon.bank.specification.RecurringTransactionSpecification;
 import com.boon.bank.specification.SpecificationBuilder;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.support.CronExpression;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -45,6 +53,7 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
     private final TransactionService transactionService;
     private final RecurringTransactionServiceImpl self;
     private final Clock clock;
+    private final Scheduler scheduler;
 
     public RecurringTransactionServiceImpl(
             RecurringTransactionRepository repository,
@@ -52,13 +61,15 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
             AccountRepository accountRepository,
             TransactionService transactionService,
             @Lazy RecurringTransactionServiceImpl self,
-            Clock clock) {
+            Clock clock,
+            Scheduler scheduler) {
         this.repository = repository;
         this.mapper = mapper;
         this.accountRepository = accountRepository;
         this.transactionService = transactionService;
         this.self = self;
         this.clock = clock;
+        this.scheduler = scheduler;
     }
 
     @Override
@@ -79,17 +90,46 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
                 .nextRunAt(nextRun(cron, Instant.now(clock)))
                 .enabled(req.enabled() == null || req.enabled())
                 .build();
-        return mapper.toRes(repository.save(entity));
+        RecurringTransaction saved = repository.save(entity);
+
+        // Dual-write: mirror to Quartz in the same @Transactional. P02 spike proved
+        // LocalDataSourceJobStore joins Spring's tx — scheduler throw → entity rollback.
+        try {
+            JobDetail job = RecurringTriggerFactory.buildJobDetail(saved);
+            Trigger trigger = RecurringTriggerFactory.buildTrigger(saved);
+            scheduler.scheduleJob(job, trigger);
+            if (!saved.isEnabled()) {
+                scheduler.pauseTrigger(RecurringTriggerFactory.triggerKey(saved.getId()));
+            }
+            log.info("Scheduled recurring {} cron='{}' nextFire={}",
+                    saved.getId(), saved.getCronExpression(), safeNextFireTime(trigger.getKey()));
+        } catch (SchedulerException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to schedule recurring job: " + e.getMessage());
+        }
+        return mapper.toRes(saved);
     }
 
     @Override
     public RecurringTransactionRes update(UUID id, RecurringTransactionUpdateReq req) {
         RecurringTransaction rec = repository.findById(id)
                 .orElseThrow(RecurringTransactionNotFoundException::new);
+        String oldCron = rec.getCronExpression();
         mapper.update(req, rec);
-        if (req.cronExpression() != null) {
+        if (req.cronExpression() != null && !req.cronExpression().equals(oldCron)) {
             CronExpression cron = parseCron(req.cronExpression());
             rec.setNextRunAt(nextRun(cron, Instant.now(clock)));
+            // Reschedule only when cron changed — avoids resetting nextFireTime on
+            // amount-only updates.
+            try {
+                Trigger newTrigger = RecurringTriggerFactory.buildTrigger(rec);
+                scheduler.rescheduleJob(RecurringTriggerFactory.triggerKey(id), newTrigger);
+                log.info("Rescheduled recurring {} cron='{}' → nextFire={}",
+                        id, rec.getCronExpression(), safeNextFireTime(newTrigger.getKey()));
+            } catch (SchedulerException e) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                        "Failed to reschedule recurring job: " + e.getMessage());
+            }
         }
         return mapper.toRes(rec);
     }
@@ -105,10 +145,6 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
     @Override
     @Transactional(readOnly = true)
     public Page<RecurringTransactionRes> search(UUID sourceAccountId, Boolean enabled, Pageable pageable) {
-        // Audit finding DL2: before this guard, a no-param GET returned every customer's
-        // recurring transactions. Non-staff callers must always be constrained to their
-        // own customer; staff may see all. Fail-closed when a customer token carries no
-        // customer id (orphaned token / staff-without-customer context).
         UUID customerFilter = null;
         if (!SecurityUtil.isStaff()) {
             customerFilter = SecurityUtil.getCurrentCustomerId()
@@ -127,6 +163,20 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
         RecurringTransaction rec = repository.findById(id)
                 .orElseThrow(RecurringTransactionNotFoundException::new);
         rec.setEnabled(true);
+        try {
+            TriggerKey key = RecurringTriggerFactory.triggerKey(id);
+            if (scheduler.checkExists(key)) {
+                scheduler.resumeTrigger(key);
+            } else {
+                // Defensive: trigger missing (e.g., manual DB cleanup) — recreate.
+                scheduler.scheduleJob(
+                        RecurringTriggerFactory.buildJobDetail(rec),
+                        RecurringTriggerFactory.buildTrigger(rec));
+            }
+        } catch (SchedulerException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to enable recurring job: " + e.getMessage());
+        }
     }
 
     @Override
@@ -134,16 +184,34 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
         RecurringTransaction rec = repository.findById(id)
                 .orElseThrow(RecurringTransactionNotFoundException::new);
         rec.setEnabled(false);
+        try {
+            scheduler.pauseTrigger(RecurringTriggerFactory.triggerKey(id));
+        } catch (SchedulerException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to disable recurring job: " + e.getMessage());
+        }
     }
 
     @Override
     public void delete(UUID id) {
         RecurringTransaction rec = repository.findById(id)
                 .orElseThrow(RecurringTransactionNotFoundException::new);
+        // Review M1 fix: delete entity FIRST, Quartz SECOND — consistent ordering
+        // with create (entity → Quartz). If entity delete throws (FK/lock), the
+        // Quartz trigger remains, next backfill is idempotent and Spring rollback
+        // undoes any row change.
         repository.delete(rec);
+        try {
+            // deleteJob is idempotent — cascades triggers, no-op if jobKey absent.
+            scheduler.deleteJob(RecurringTriggerFactory.jobKey(id));
+        } catch (SchedulerException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to remove recurring job: " + e.getMessage());
+        }
     }
 
     @Override
+    @Deprecated
     public void processDue() {
         Instant now = Instant.now(clock);
         List<UUID> dueIds = self.findDueIds(now);
@@ -156,6 +224,8 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
         }
     }
 
+ 
+    @Deprecated
     @Transactional(readOnly = true)
     public List<UUID> findDueIds(Instant cutoff) {
         return repository.findByEnabledTrueAndNextRunAtBefore(cutoff).stream()
@@ -163,10 +233,22 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
                 .toList();
     }
 
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processOne(UUID id) {
+        processOne(id, Instant.now(clock));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processOne(UUID id, Instant scheduledFireInstant) {
         RecurringTransaction rec = repository.findById(id)
                 .orElseThrow(RecurringTransactionNotFoundException::new);
+        if (!rec.isEnabled()) {
+            log.info("Skip disabled recurring tx {}", id);
+            return;
+        }
+        String idempotencyKey = buildRecurringIdempotencyKey(id, scheduledFireInstant);
         TransferReq req = new TransferReq(
                 rec.getSourceAccount().getAccountNumber(),
                 rec.getDestinationAccount().getAccountNumber(),
@@ -174,10 +256,41 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
                 rec.getSourceAccount().getCurrency(),
                 null,
                 "Recurring " + rec.getId());
-        transactionService.transfer(req, "REC-" + UUID.randomUUID());
+        transactionService.transfer(req, idempotencyKey);
         Instant now = Instant.now(clock);
         rec.setLastRunAt(now);
-        rec.setNextRunAt(nextRun(parseCron(rec.getCronExpression()), now));
+
+        Instant next = quartzNextFireTime(id);
+        if (next == null) {
+            log.warn("Quartz trigger missing/exhausted for {} — falling back to cron compute", id);
+            next = nextRun(parseCron(rec.getCronExpression()), now);
+        }
+        rec.setNextRunAt(next);
+    }
+
+    private Instant quartzNextFireTime(UUID id) {
+        try {
+            Trigger t = scheduler.getTrigger(RecurringTriggerFactory.triggerKey(id));
+            if (t == null || t.getNextFireTime() == null) return null;
+            return t.getNextFireTime().toInstant();
+        } catch (SchedulerException e) {
+            log.warn("Failed to read next fire time for {}: {}", id, e.getMessage());
+            return null;
+        }
+    }
+
+    private java.util.Date safeNextFireTime(TriggerKey key) {
+        try {
+            Trigger t = scheduler.getTrigger(key);
+            return t == null ? null : t.getNextFireTime();
+        } catch (SchedulerException e) {
+            return null;
+        }
+    }
+
+
+    static String buildRecurringIdempotencyKey(UUID id, Instant scheduledFireInstant) {
+        return "REC-" + id + "-" + scheduledFireInstant.getEpochSecond();
     }
 
     private static CronExpression parseCron(String expression) {
@@ -194,9 +307,6 @@ public class RecurringTransactionServiceImpl implements RecurringTransactionServ
         LocalDateTime local = LocalDateTime.ofInstant(after, zone);
         LocalDateTime next = cron.next(local);
         if (next == null) {
-            // Cron has no future occurrence after `after` (e.g., an expired one-shot
-            // expression). Returning `after` unchanged would cause processDue to re-fire
-            // the same row on every scheduler tick — an infinite execution loop.
             throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                     "Cron expression has no future occurrence: scheduling would loop");
         }

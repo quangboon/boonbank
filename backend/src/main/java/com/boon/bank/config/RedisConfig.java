@@ -24,7 +24,7 @@ public class RedisConfig {
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "caffeine", matchIfMissing = true)
     public CacheManager caffeineCacheManager() {
         CaffeineCacheManager mgr = new CaffeineCacheManager(
-                "customers", "accounts", "fxRates", "customerTypes");
+                "customers", "accounts", "fxRates", "customerTypes", "account-lookup");
         mgr.setCaffeine(Caffeine.newBuilder()
                 .maximumSize(10_000)
                 .expireAfterWrite(5, TimeUnit.MINUTES));

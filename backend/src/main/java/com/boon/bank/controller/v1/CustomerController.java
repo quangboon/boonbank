@@ -4,6 +4,7 @@ import com.boon.bank.dto.common.ApiResponse;
 import com.boon.bank.dto.common.PageResponse;
 import com.boon.bank.dto.request.customer.CustomerCreateReq;
 import com.boon.bank.dto.request.customer.CustomerUpdateReq;
+import com.boon.bank.dto.response.customer.CustomerCreateRes;
 import com.boon.bank.dto.response.customer.CustomerRes;
 import com.boon.bank.service.customer.CustomerService;
 import com.boon.bank.service.security.OwnershipService;
@@ -34,7 +35,7 @@ public class CustomerController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CustomerRes>> create(@Valid @RequestBody CustomerCreateReq req) {
+    public ResponseEntity<ApiResponse<CustomerCreateRes>> create(@Valid @RequestBody CustomerCreateReq req) {
         return ResponseEntity.ok(ApiResponse.ok(customerService.create(req)));
     }
 

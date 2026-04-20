@@ -1,16 +1,22 @@
 package com.boon.bank.service.scheduler;
 
-import com.boon.bank.service.recurring.RecurringTransactionService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.time.Duration;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
+import com.boon.bank.service.recurring.RecurringTransactionService;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+
+@Deprecated
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "scheduler.legacy.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class RecurringTransactionScheduler {
 

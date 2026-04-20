@@ -19,7 +19,7 @@ public class CustomerTypeServiceImpl implements CustomerTypeService {
 
     @Override
     @Cacheable(value = "customerTypes", key = "#code",
-            unless = "#result == null || #result.isEmpty()")
+            unless = "#result == null")
     public Optional<CustomerType> findByCode(String code) {
         return customerTypeRepository.findByCode(code);
     }

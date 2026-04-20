@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -44,13 +45,10 @@ public class TransactionRepositoryImpl implements TransactionRepositoryCustom {
     }
 
     @Override
-    @SuppressWarnings("unchecked") // em.createNativeQuery(sql, Tuple.class).getResultList() is raw List
+    @SuppressWarnings("unchecked")
     public List<TransactionPeriodSummary> statsByPeriod(PeriodUnit unit, UUID accountId,
                                                         Instant from, Instant to, String timezone) {
         ZoneId zone = ZoneId.of(timezone);
-        // unit.sqlLiteral() is a compile-time whitelist (week/quarter/year). No user
-        // input reaches the interpolated fragment — changing that must go through the
-        // PeriodUnit enum, which is grep-guarded by the P06 exit criteria.
         String sql = String.format("""
                 select date_trunc('%s', t.created_at at time zone :tz) as bucket,
                        min(t.amount)                                   as min_amount,
@@ -59,7 +57,9 @@ public class TransactionRepositoryImpl implements TransactionRepositoryCustom {
                        coalesce(sum(t.amount), 0)                      as sum_amount,
                        count(*)                                        as cnt
                 from transactions t
-                where (t.source_account_id = :aid or t.destination_account_id = :aid)
+                where (cast(:aid as uuid) is null
+                       or t.source_account_id = :aid
+                       or t.destination_account_id = :aid)
                   and t.created_at >= :from
                   and t.created_at <  :to
                 group by bucket
@@ -84,18 +84,12 @@ public class TransactionRepositoryImpl implements TransactionRepositoryCustom {
                 .toList();
     }
 
-    // searchForReport removed in P05 — all report data now streams via
-    // TransactionRepository.streamReportRows. Eager-load methods for exports are
-    // forbidden by the grep rule in plan_05_streaming_export.md T7.
-
-    // Postgres `AT TIME ZONE` returns TIMESTAMPTZ. Modern pgjdbc surfaces that as
-    // OffsetDateTime; legacy drivers may still return java.sql.Timestamp (no zone).
-    // The Timestamp branch rehydrates the instant into the business zone — NOT UTC —
-    // so the OffsetDateTime is indistinguishable from the modern path for any caller
-    // that reads .getOffset() (see P06 review M1).
     private static OffsetDateTime toOffsetDateTime(Object raw, ZoneId zone) {
         if (raw instanceof OffsetDateTime odt) {
             return odt;
+        }
+        if (raw instanceof LocalDateTime ldt) {
+            return ldt.atZone(zone).toOffsetDateTime();
         }
         if (raw instanceof Timestamp ts) {
             return ts.toInstant().atZone(zone).toOffsetDateTime();

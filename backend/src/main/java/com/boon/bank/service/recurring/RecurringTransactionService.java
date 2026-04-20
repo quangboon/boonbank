@@ -6,6 +6,7 @@ import com.boon.bank.dto.response.recurring.RecurringTransactionRes;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public interface RecurringTransactionService {
@@ -24,5 +25,8 @@ public interface RecurringTransactionService {
 
     void delete(UUID id);
 
+    @Deprecated
     void processDue();
+
+    void processOne(UUID id, Instant scheduledFireInstant);
 }

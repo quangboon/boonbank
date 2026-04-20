@@ -1,26 +1,30 @@
 package com.boon.bank.service.user.impl;
 
-import com.boon.bank.dto.request.user.UserCreateReq;
-import com.boon.bank.dto.response.user.UserRes;
-import com.boon.bank.entity.customer.Customer;
-import com.boon.bank.entity.user.User;
-import com.boon.bank.exception.ErrorCode;
-import com.boon.bank.exception.business.BusinessException;
-import com.boon.bank.exception.business.CustomerNotFoundException;
-import com.boon.bank.exception.business.UserNotFoundException;
-import com.boon.bank.mapper.UserMapper;
-import com.boon.bank.repository.CustomerRepository;
-import com.boon.bank.repository.UserRepository;
-import com.boon.bank.service.user.UserService;
-import lombok.RequiredArgsConstructor;
+import java.util.EnumSet;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumSet;
-import java.util.UUID;
+import com.boon.bank.dto.request.user.UserCreateReq;
+import com.boon.bank.dto.response.user.UserRes;
+import com.boon.bank.entity.customer.Customer;
+import com.boon.bank.entity.user.User;
+import com.boon.bank.exception.ErrorCode;
+import com.boon.bank.exception.business.BadRequestException;
+import com.boon.bank.exception.business.BusinessException;
+import com.boon.bank.exception.business.CustomerNotFoundException;
+import com.boon.bank.exception.business.UserNotFoundException;
+import com.boon.bank.mapper.UserMapper;
+import com.boon.bank.repository.CustomerRepository;
+import com.boon.bank.repository.UserRepository;
+import com.boon.bank.security.SecurityUtil;
+import com.boon.bank.service.user.UserService;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -68,7 +72,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.List<UserRes> listByCustomer(UUID customerId) {
+        return userRepository.findByCustomerId(customerId).stream()
+                .map(userMapper::toRes)
+                .toList();
+    }
+
+    @Override
     public void disable(UUID id) {
+
+        SecurityUtil.getCurrentUserId().ifPresent(currentId -> {
+            if (currentId.equals(id)) {
+                throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
+                        "Không thể tắt chính tài khoản đang đăng nhập");
+            }
+        });
         User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
         user.setEnabled(false);
     }
@@ -77,5 +96,16 @@ public class UserServiceImpl implements UserService {
     public void enable(UUID id) {
         User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
         user.setEnabled(true);
+    }
+
+    @Override
+    public String resetPassword(UUID id) {
+        User user = userRepository.findById(id).orElseThrow(UserNotFoundException::new);
+        String tempPassword = com.boon.bank.common.util.CodeGenerator.tempPassword();
+        user.setPasswordHash(passwordEncoder.encode(tempPassword));
+       // user.setAccountLocked(false);
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
+        return tempPassword;
     }
 }

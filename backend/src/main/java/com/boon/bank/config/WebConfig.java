@@ -1,13 +1,15 @@
 package com.boon.bank.config;
 
-import com.boon.bank.common.idempotency.IdempotentInterceptor;
-import com.boon.bank.common.ratelimit.RateLimitInterceptor;
-import com.boon.bank.controller.advice.TraceIdInterceptor;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import com.boon.bank.common.idempotency.IdempotentInterceptor;
+import com.boon.bank.common.ratelimit.RateLimitInterceptor;
+import com.boon.bank.controller.advice.TraceIdInterceptor;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @RequiredArgsConstructor
@@ -23,6 +25,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOriginPatterns("*")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
+                .exposedHeaders("Content-Disposition")
                 .allowCredentials(true);
     }
 

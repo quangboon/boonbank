@@ -25,6 +25,15 @@ public final class CodeGenerator {
         return "TX" + Long.toString(Instant.now().toEpochMilli(), 36).toUpperCase() + randomDigits(4);
     }
 
+    private static final char[] PW_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789".toCharArray();
+
+    public static String tempPassword() {
+        StringBuilder sb = new StringBuilder(12);
+        for (int i = 0; i < 12; i++) sb.append(PW_ALPHABET[RNG.nextInt(PW_ALPHABET.length)]);
+        return sb.toString();
+    }
+
     private static String randomDigits(int n) {
         StringBuilder sb = new StringBuilder(n);
         for (int i = 0; i < n; i++) sb.append(RNG.nextInt(10));
