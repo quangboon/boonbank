@@ -26,7 +26,7 @@ public class RecurringTransactionScheduler {
     private final RecurringTransactionService recurringTransactionService;
     private final StringRedisTemplate redis;
 
-    @Scheduled(cron = "0 */5 * * * *")
+//    @Scheduled(cron = "0 */5 * * * *")
     public void run() {
         Boolean acquired = redis.opsForValue().setIfAbsent(LOCK_KEY, "1", LOCK_TTL);
         if (!Boolean.TRUE.equals(acquired)) {
